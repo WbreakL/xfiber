@@ -3,6 +3,7 @@
 #include <map>
 #include <list>
 #include <queue>
+#include<list>
 #include <vector>
 #include <string>
 #include <functional>
@@ -52,8 +53,8 @@ public:
 private:
     int efd_;
     
-    std::deque<Fiber *> ready_fibers_;
-
+    //std::deque<Fiber *> ready_fibers_;
+    std::list<Fiber*> ready_fibers_;
     ucontext_t sched_ctx_;
 
     Fiber *curr_fiber_;

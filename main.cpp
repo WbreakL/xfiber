@@ -40,6 +40,7 @@ int main() {
 
     xfiber->CreateFiber([&]{
         Listener listener = Listener::ListenTCP(6379);
+        
         while (true) {
             shared_ptr<Connection> conn = listener.Accept();
             xfiber->CreateFiber([conn] {
@@ -51,7 +52,7 @@ int main() {
                     }
                     recv_buf[n] = '\0';
                     //cout << "recv: " << recv_buf << endl;
-                    char *rsp = "+OK\r\n";
+                    const char *rsp = "+OK\r\n";
                     conn->Write(rsp, strlen(rsp));
                 }
             }, 0, "server");
