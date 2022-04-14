@@ -1,37 +1,30 @@
 #pragma once
 
-
 #include <cstdio>
 #include <sstream>
 #include <string>
 
 #define LOG(level) \
-    XFiberLog::instance().log(__FILE__, __LINE__, __FUNCTION__, __DATE__, __TIME__,level)
+    XFiberLog(__FILE__, __LINE__, __FUNCTION__, __DATE__, __TIME__,level).stream()
 
-
-class XFiberLog{
+class XFiberLog
+{
 public:
-    // XFiberLog(const char* file, int line,const char* function, const char* date, const char* time,std::string level) {
-    //     stream_ <<"["<<level<<"][" << date << " " << time << "][" << file <<" - " << function << ":" << line << "]";
-    // }
-    static XFiberLog& instance(){
-        static XFiberLog log;
-        return log;
-    }
-    ~XFiberLog() {
-        // stream_ << std::endl;
-        // std::string str_newline(stream_.str());
-        // fprintf(stderr, "%s", str_newline.c_str());
-        // fflush(stderr);
-    }
-    std::ostream& log(const char *file, int line, const char *function, const char *date, const char *time, std::string level)
+    XFiberLog(const char *file, int line, const char *function, const char *date, const char *time,const char* level)
     {
-         return stream_ << "[" << level << "][" << date << " " << time << "][" << file << " - " << function << ":" << line << "]";
+        stream_ <<"["<<level<<"]"<< "[" << date << " " << time << "][" << file << " - " << function << ":" << line << "] [INFO] - ";
     }
 
-    std::ostream& stream() { return stream_;}
+    ~XFiberLog()
+    {
+        stream_ << std::endl;
+        std::string str_newline(stream_.str());
+        fprintf(stderr, "%s", str_newline.c_str());
+        fflush(stderr);
+    }
 
+    std::ostream &stream() { return stream_; }
 
-
+private:
     std::ostringstream stream_;
 };

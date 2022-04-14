@@ -16,12 +16,14 @@ void sigint_action(int sig) {
     std::cout << "exit..." << std::endl;
     exit(0);    
 }
+void func1(){
 
+}
 int main() {
     signal(SIGINT, sigint_action);
 
     XFiber *xfiber = XFiber::xfiber();
-    /*xfiber->AddTask([&]() {
+    xfiber->CreateFiber([&]() {
         cout << "hello world 11" << endl;
         xfiber->Yield();
         cout << "hello world 12" << endl;
@@ -33,31 +35,31 @@ int main() {
 
     }, 0, "f1");
 
-    xfiber->AddTask([]() {
+    xfiber->CreateFiber([]() {
         cout << "hello world 2" << endl;
     }, 0, "f2");
-    */
+    
 
-    xfiber->CreateFiber([&]{
-        Listener listener = Listener::ListenTCP(6379);
+    // xfiber->CreateFiber([&]{
+    //     Listener listener = Listener::ListenTCP(6379);
         
-        while (true) {
-            shared_ptr<Connection> conn = listener.Accept();
-            xfiber->CreateFiber([conn] {
-                while (true) {
-                    char recv_buf[512];
-                    int n = conn->Read(recv_buf, 512);
-                    if (n <= 0) {
-                        break;
-                    }
-                    recv_buf[n] = '\0';
-                    //cout << "recv: " << recv_buf << endl;
-                    const char *rsp = "+OK\r\n";
-                    conn->Write(rsp, strlen(rsp));
-                }
-            }, 0, "server");
-        }
-    });
+    //     while (true) {
+    //         shared_ptr<Connection> conn = listener.Accept();
+    //         xfiber->CreateFiber([conn] {
+    //             while (true) {
+    //                 char recv_buf[512];
+    //                 int n = conn->Read(recv_buf, 512);
+    //                 if (n <= 0) {
+    //                     break;
+    //                 }
+    //                 recv_buf[n] = '\0';
+    //                 //cout << "recv: " << recv_buf << endl;
+    //                 const char *rsp = "+OK\r\n";
+    //                 conn->Write(rsp, strlen(rsp));
+    //             }
+    //         }, 0, "server");
+    //     }
+    // });
     
     xfiber->Dispatch();
 

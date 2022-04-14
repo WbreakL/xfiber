@@ -38,19 +38,21 @@ void XFiber::CreateFiber(std::function<void ()> run, size_t stack_size, std::str
     }
     Fiber *fiber = new Fiber(run, stack_size, fiber_name);
     fiber->SetXFiber(this);
-    ready_fibers_.push_back(fiber);
+    ready_fibers_.push_back(fiber);  
     LOG("DEBUG") << "create a new fiber with id[" << fiber->Seq() << "]" << fiber;
 }
 //执行就绪队列中的协程，然后执行epoll_wait
 void XFiber::Dispatch() {
     while (true) {
         if (ready_fibers_.size() > 0) {
-            // std::deque<Fiber *> ready = std::move(ready_fibers_);
-            // ready_fibers_.clear();
+             
             std::list<Fiber*>& ready=ready_fibers_;
             LOG("DEBUG") << "There are " << ready.size() << " fiber(s) in ready list, ready to run...";
 
-            for (auto iter = ready.begin(); iter != ready.end(); iter++) {
+            for (auto iter = ready.begin(); iter != ready.end()||ready.size()>0; iter++) {
+                if(iter==ready.end()){
+                    iter=ready.begin();
+                }
                 Fiber *fiber = *iter;
                 curr_fiber_ = fiber;
                 LOG("DEBUG") << "switch from sched to fiber[" << fiber->Seq() << "]";
@@ -59,11 +61,13 @@ void XFiber::Dispatch() {
 
                 if (fiber->IsFinished()) {
                     LOG("INFO") << "fiber[" << fiber->Seq() << "] finished, free it!";
-                    ready_fibers_.erase(iter);
+                    iter=ready_fibers_.erase(iter);//第一次段错误，因为迭代器失效
+                    LOG("DEBUG")<<"erase success";
                     delete fiber;
                 }
+                
             }
-            //ready.clear();
+            
         }
 
         struct epoll_event evs[512];
@@ -102,7 +106,7 @@ void XFiber::Dispatch() {
 void XFiber::Yield() {
     assert(curr_fiber_ != nullptr);
     // 主动切出的后仍然是ready状态，等待下次调度
-    ready_fibers_.push_back(curr_fiber_);
+    //ready_fibers_.push_back(curr_fiber_);
     SwitchToSchedFiber();
 }
 
@@ -191,6 +195,7 @@ Fiber::Fiber(std::function<void ()> run, size_t stack_size, std::string fiber_na
 }
 
 Fiber::~Fiber() {
+    delete[] stack_ptr_;
 }
     
 uint64_t Fiber::Seq() {
@@ -210,7 +215,7 @@ ucontext_t *Fiber::Ctx() {
     return &ctx_;
 }
 
-void Fiber::Start(Fiber *fiber) {
+void Fiber::Start(Fiber *fiber) {//封装run（）函数， 
     fiber->run_();
     fiber->status_ = FiberStatus::FINISHED;
     LOG("DEBUG") << "fiber[" << fiber->Seq() << "] finished...";
