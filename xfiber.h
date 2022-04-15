@@ -27,7 +27,7 @@ public:
 
     void WakeupFiber(Fiber *fiber);
 
-    void CreateFiber(std::function<void()> run, size_t stack_size = 0, std::string fiber_name="");
+    Fiber* CreateFiber(std::function<void()> run, size_t stack_size = 0, std::string fiber_name="");
 
     void Dispatch();
 
@@ -35,11 +35,19 @@ public:
 
     void SwitchToSchedFiber();
 
-    bool RegisterFdToSchedWithFiber(int fd, Fiber *fiber, int op);
+    bool RegisterFdToSchedWithFiber(int fd, Fiber *fiber);
 
     bool UnregisterFdFromSched(int fd);
 
-    ucontext_t *SchedCtx();
+    bool RegisterFdToEpoll(int fd);
+
+    bool UnregisterFdFromEpoll(int fd);
+
+    bool AddReadyFibers(Fiber* fiber);
+
+    void EventLoop();
+        ucontext_t *
+        SchedCtx();
 
     static XFiber *xfiber() {
         static thread_local XFiber xf;
@@ -50,26 +58,25 @@ public:
         return curr_fiber_;
     }
 
-private:
+//private:
     int efd_;
     
-    //std::deque<Fiber *> ready_fibers_;
-    std::list<Fiber*> ready_fibers_;
+    
+    std::list<Fiber*> ready_fibers_,work_fibers_;
     ucontext_t sched_ctx_;
 
     Fiber *curr_fiber_;
 
-    struct WaitingFibers {
+    /*struct WaitingFibers {
         Fiber *r_, *w_;
         WaitingFibers() {
             r_ = nullptr;
             w_ = nullptr;
         }
-    };
+    };*/
 
-    std::map<int, WaitingFibers> io_waiting_fibers_;
-    // 会不会出现一个fd的读/写被多个协程监听？？不会！
-    // 但是一个fiber可能会监听多个fd，实际也不存在，一个连接由一个协程处理
+    std::map<int, Fiber*> io_waiting_fibers_;
+    
 };
 
 

@@ -58,12 +58,13 @@ std::shared_ptr<Connection> Listener::Accept() {
                 perror("fcntl");
                 exit(-1);
             }
+            xfiber->RegisterFdToEpoll(client_fd);
             return std::shared_ptr<Connection>(new Connection(client_fd));
         }
         else {
-            if (errno == EAGAIN) {
+            if (errno == EAGAIN||errno==EWOULDBLOCK) {//补充情况
                 // accept失败，协程切出
-                xfiber->RegisterFdToSchedWithFiber(fd_, xfiber->CurrFiber(), 0);
+                //xfiber->RegisterFdToSchedWithFiber(fd_, xfiber->CurrFiber(), 0);
                 xfiber->SwitchToSchedFiber();
             }
             else {
@@ -71,6 +72,6 @@ std::shared_ptr<Connection> Listener::Accept() {
             }
         }
     }
-    return std::shared_ptr<Connection>(new Connection(-1));
+    return std::shared_ptr<Connection>(new Connection(-1));//永远不会被执行，只是为了分支结构完整
 }
 

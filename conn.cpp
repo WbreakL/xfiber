@@ -25,10 +25,10 @@ ssize_t Connection::Write(const char *buf, size_t sz, int timeout_ms) const {
         int n = write(fd_, buf + write_bytes, sz - write_bytes);
         if (n > 0) {
             write_bytes += n;
-            LOG("DEBUG") << "write to fd[" << fd_ << "] return " << n << ", total send " << write_bytes << " bytes";
+            LOG("DEBUG") << "write to fd[" << fd_ << "]  " << n << "bytes , total send " << write_bytes << " bytes";
         }
         else if (n == 0) {
-            LOG("DEBUG") << "write to fd[" << fd_ << "] return 0 byte, peer has closed";
+            LOG("DEBUG") << "write to fd[" << fd_ << "]  0 byte, peer has closed";
             return 0;
         }
         else {
@@ -39,7 +39,7 @@ ssize_t Connection::Write(const char *buf, size_t sz, int timeout_ms) const {
             else if (errno == EAGAIN) {
                 LOG("DEBUG") << "write to fd[" << fd_ << "] "
                               "return EAGIN, add fd into IO waiting events and switch to sched";
-                xfiber->RegisterFdToSchedWithFiber(fd_, xfiber->CurrFiber(), 1);
+                
                 xfiber->SwitchToSchedFiber();
             }
             else {
@@ -57,12 +57,12 @@ ssize_t Connection::Read(char *buf, size_t sz, int timeout_ms) const {
 
     while (true) {
         int n = read(fd_, buf, sz);
-        LOG("DEBUG") << "read from fd[" << fd_ << "] reutrn " << n <<  " bytes";
+        LOG("DEBUG") << "read from fd[" << fd_ << "]  " << n <<  " bytes";
         if (n > 0) {
             return n;
         }
         else if (n == 0) {
-            LOG("DEBUG") << "read from fd[" << fd_ << "] return 0 byte, peer has closed";
+            LOG("DEBUG") << "read from fd[" << fd_ << "]  0 byte, peer has closed";
             return 0;
         }
         else {
@@ -73,7 +73,6 @@ ssize_t Connection::Read(char *buf, size_t sz, int timeout_ms) const {
             else if (errno == EAGAIN) {
                 LOG("DEBUG") << "read from fd[" << fd_ << "] "
                               "return EAGIN, add fd into IO waiting events and switch to sched";
-                xfiber->RegisterFdToSchedWithFiber(fd_, xfiber->CurrFiber(), 0);
                 xfiber->SwitchToSchedFiber();
             }
             else if (errno == EINTR) {

@@ -32,15 +32,19 @@ void XFiber::WakeupFiber(Fiber *fiber) {
     ready_fibers_.push_back(fiber);
 }
 
-void XFiber::CreateFiber(std::function<void ()> run, size_t stack_size, std::string fiber_name) {
+Fiber* XFiber::CreateFiber(std::function<void ()> run, size_t stack_size, std::string fiber_name) {
     if (stack_size == 0) {
         stack_size = 431072;
     }
     Fiber *fiber = new Fiber(run, stack_size, fiber_name);
     fiber->SetXFiber(this);
-    ready_fibers_.push_back(fiber);  
-    LOG("DEBUG") << "create a new fiber with id[" << fiber->Seq() << "]" << fiber;
+    work_fibers_.push_back(fiber);  
+    LOG("DEBUG") << "create a new fiber with id[" << fiber->Seq() << "]" << fiber->Name();
+    return fiber;
 }
+// bool XFiber::AddReadyFibers(Fiber* fiber){
+//     ready_fibers.push_back(fiber);
+// }
 //执行就绪队列中的协程，然后执行epoll_wait
 void XFiber::Dispatch() {
     while (true) {
@@ -49,14 +53,15 @@ void XFiber::Dispatch() {
             std::list<Fiber*>& ready=ready_fibers_;
             LOG("DEBUG") << "There are " << ready.size() << " fiber(s) in ready list, ready to run...";
 
-            for (auto iter = ready.begin(); iter != ready.end()||ready.size()>0; iter++) {
-                if(iter==ready.end()){
-                    iter=ready.begin();
-                }
+            for (auto iter = ready.begin(); iter != ready.end(); iter++) {
+                // if(iter==ready.end()){
+                //     iter=ready.begin();
+                // }
                 Fiber *fiber = *iter;
                 curr_fiber_ = fiber;
                 LOG("DEBUG") << "switch from sched to fiber[" << fiber->Seq() << "]";
                 assert(swapcontext(SchedCtx(), fiber->Ctx()) == 0);
+                sleep(1);
                 curr_fiber_ = nullptr;
 
                 if (fiber->IsFinished()) {
@@ -64,45 +69,57 @@ void XFiber::Dispatch() {
                     iter=ready_fibers_.erase(iter);//第一次段错误，因为迭代器失效
                     LOG("DEBUG")<<"erase success";
                     delete fiber;
-                }
-                
+                }  
             }
-            
         }
+    }
+}
+void XFiber::EventLoop(){
+    while(true){
 
+    
         struct epoll_event evs[512];
         int n = epoll_wait(efd_, evs, 512, 10);
-        if (n < 0) {
+        if (n < 0)
+        {
             perror("epoll_wait");
             exit(-1);
         }
-
-        for (int i = 0; i < n; i++) {
+        if(n==0){
+            Yield();
+        }
+        for (int i = 0; i < n; i++)
+        {
             struct epoll_event &ev = evs[i];
             int fd = ev.data.fd;
 
             auto fiber_iter = io_waiting_fibers_.find(fd);
-            if (fiber_iter != io_waiting_fibers_.end()) {
-                WaitingFibers &waiting_fibers = fiber_iter->second;
-                if (ev.events & EPOLLIN) {
+            if (fiber_iter != io_waiting_fibers_.end())
+            {
+                Fiber* waiting_fibers = fiber_iter->second;
+                if (ev.events & EPOLLIN)
+                {
                     // wakeup
-                    LOG("DEBUG") << "waiting fd[" << fd << "] has fired IN event, wake up pending fiber[" << waiting_fibers.r_->Seq() << "]";
-                    ready_fibers_.push_back(waiting_fibers.r_);
+                    LOG("DEBUG") << "waiting fd[" << fd << "] has fired IN event, wake up pending fiber[" << waiting_fibers->Seq() << "]";
+                    
+                    ready_fibers_.push_back(waiting_fibers);
                 }
-                else if (ev.events & EPOLLOUT) {
-                    if (waiting_fibers.w_ == nullptr) {
+                else if (ev.events & EPOLLOUT)
+                {
+                    if (waiting_fibers == nullptr)
+                    {
                         LOG("WARNING") << "fd[" << fd << "] has been fired OUT event, but not found any fiber to handle!";
                     }
-                    else {
-                        LOG("DEBUG") << "waiting fd[" << fd << "] has fired OUT event, wake up pending fiber[" << waiting_fibers.w_->Seq() << "]";
-                        ready_fibers_.push_back(waiting_fibers.w_);
+                    else
+                    {
+                        LOG("DEBUG") << "waiting fd[" << fd << "] has fired OUT event, wake up pending fiber[" << waiting_fibers->Seq() << "]";
+                        ready_fibers_.push_back(waiting_fibers);
                     }
                 }
             }
         }
     }
 }
-
 void XFiber::Yield() {
     assert(curr_fiber_ != nullptr);
     // 主动切出的后仍然是ready状态，等待下次调度
@@ -116,7 +133,7 @@ void XFiber::SwitchToSchedFiber() {
     assert(swapcontext(curr_fiber_->Ctx(), SchedCtx()) == 0);
 }
 
-bool XFiber::RegisterFdToSchedWithFiber(int fd, Fiber *fiber, int is_write) {
+bool XFiber::RegisterFdToSchedWithFiber(int fd, Fiber *fiber) {
     /*
         op = 0 读
         op = 1 写
@@ -124,41 +141,47 @@ bool XFiber::RegisterFdToSchedWithFiber(int fd, Fiber *fiber, int is_write) {
    assert(fiber != nullptr);
     auto iter = io_waiting_fibers_.find(fd);
     if (iter == io_waiting_fibers_.end()) {
-        WaitingFibers wf;
-        if (is_write == 0) { // 读
-            wf.r_ = fiber;
-            io_waiting_fibers_.insert(std::make_pair(fd, wf));
-        }
-        else {
-            wf.w_ = fiber;
-            io_waiting_fibers_.insert(std::make_pair(fd, wf));
-        }
-        struct epoll_event ev;
-        ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
-        ev.data.fd = fd;
-
-        if (epoll_ctl(efd_, EPOLL_CTL_ADD, fd, &ev) < 0) {
-            perror("epoll_ctl");
-            exit(-1);
-        }
-        LOG("DEBUG") << "add fd[" << fd << "] into epoll event success";
+          
+            io_waiting_fibers_.insert(std::make_pair(fd, fiber)); 
     }
     else {
-        if (is_write == 0 && iter->second.r_==nullptr) {//保证一个fd只有唯一的读写协程对应
-            iter->second.r_ = fiber;
-        }
-        else if(is_write==1&&iter->second.w_==nullptr){//同上
-            iter->second.w_ = fiber;
-        }
-        else{
-            //其他情况的话应该释放掉这个协程
-            delete fiber;
-        }
+        Fiber* tmp=iter->second;
+        iter->second=fiber;
+        delete tmp;
     }
 
     return true;
 }
+bool XFiber::RegisterFdToEpoll(int fd){
+    struct epoll_event ev;
+    ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
+    ev.data.fd = fd;
 
+    if (epoll_ctl(efd_, EPOLL_CTL_ADD, fd, &ev) < 0)
+    {
+        perror("epoll_ctl");
+        exit(-1);
+    }
+    LOG("DEBUG") << "add fd[" << fd << "] into epoll event success";
+    return true;
+}
+bool XFiber::UnregisterFdFromEpoll(int fd){
+    struct epoll_event ev;
+    ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
+    ev.data.fd = fd;
+
+    if (epoll_ctl(efd_, EPOLL_CTL_DEL, fd, &ev) < 0)
+    {
+        // exit(-1);
+        LOG("ERROR") << "unregister fd[" << fd << "] from epoll efd[" << efd_ << "] failed, msg=" << strerror(errno);
+        return  false;
+    }
+    else
+    {
+        LOG("ERROR") << "unregister fd[" << fd << "] from epoll efd[" << efd_ << "] success!";
+        return true;
+    }
+}
 bool XFiber::UnregisterFdFromSched(int fd) {
     auto iter = io_waiting_fibers_.find(fd);
     if (iter != io_waiting_fibers_.end()) {
@@ -166,18 +189,6 @@ bool XFiber::UnregisterFdFromSched(int fd) {
     }
     else {
         LOG("INFO") << "fd[" << fd << "] not registned into sched";
-    }
-
-    struct epoll_event ev;
-    ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
-    ev.data.fd = fd;
-
-    if (epoll_ctl(efd_, EPOLL_CTL_DEL, fd, &ev) < 0) {
-        //exit(-1);
-        LOG("ERROR") << "unregister fd[" << fd << "] from epoll efd[" << efd_ << "] failed, msg=" << strerror(errno);
-    }
-    else {
-        LOG("ERROR") << "unregister fd[" << fd << "] from epoll efd[" << efd_ << "] success!";
     }
     return true;
 }
