@@ -42,7 +42,7 @@ int main() {
 
     Fiber* accepter=xfiber->CreateFiber([&]{
         Listener listener = Listener::ListenTCP(6379);
-        static int i=0;
+        int i=0;
         while (true) {
             shared_ptr<Connection> conn = listener.Accept();//已经注册到epoll上，接下来注册对应协程
             Fiber* workFiber=xfiber->CreateFiber([conn] {
@@ -57,7 +57,7 @@ int main() {
                     const char *rsp = "+OK\r\n";
                     conn->Write(rsp, strlen(rsp));
                 }
-            }, 0, "server"+to_string(i));
+            }, 0, "server"+to_string(i++));
             xfiber->RegisterFdToSchedWithFiber(conn->RawFd(),workFiber);
         }
         

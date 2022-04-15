@@ -61,7 +61,7 @@ void XFiber::Dispatch() {
                 curr_fiber_ = fiber;
                 LOG("DEBUG") << "switch from sched to fiber[" << fiber->Seq() << "]";
                 assert(swapcontext(SchedCtx(), fiber->Ctx()) == 0);
-                sleep(1);
+                sleep(2);
                 curr_fiber_ = nullptr;
 
                 if (fiber->IsFinished()) {
